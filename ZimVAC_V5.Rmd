@@ -1,0 +1,760 @@
+---
+title: "ZimVAC Causal Paper"
+---
+A. Load and Clean-Up
+```{r}
+library(haven)
+library(spatstat)
+library(dplyr)
+
+# Load the data
+data_24 <- read_dta("C:/Users/hgruesohurtado/Dropbox/Documents/Laboral/Oxford/Climate, Conflicts, & Pandemics/Zimbabwe Paper/2024_ZimLAC_rural_SF.dta")
+data_22 <- read_dta("C:/Users/hgruesohurtado/Dropbox/Documents/Laboral/Oxford/Climate, Conflicts, & Pandemics/Zimbabwe Paper/2022_ZimVAC_RLA_SF.dta")
+
+# Background characteristics
+# 2024 Data Processing
+data_24$hh_age[data_24$hh_age == 998] <- NA
+data_24$hhh_age <- data_24$hh_age
+
+data_24$hhh_sex <- data_24$hh_sex
+data_24$hhh_female_d <- ifelse(data_24$hhh_sex == 1, 1, 0)
+
+data_24$hhh_marital <- data_24$hh_marital
+data_24$hhh_marital[data_24$hhh_marital == 99] <- NA
+
+data_24$province_d <- as.factor(data_24$province_code)
+data_24$hhh_religion_d <- as.factor(data_24$hh_religion)
+
+data_24$hheduclevel[is.na(data_24$hheduclevel)] <- data_24$reseduclevel
+data_24$hhh_education_d <- as.factor(data_24$hheduclevel)
+data_24$hhh_educated <- ifelse(data_24$hhh_education_d == 1, 0, 1)
+
+data_24$hhh_employ <- data_24$hh_employ
+data_24$hhh_employ_d <- as.factor(data_24$hhh_employ)
+
+data_24$draughtpowercat_d <- as.factor(data_24$draughtpowercat)
+data_24$lnproxy_income <- log(1 + data_24$proxy_income)
+
+# Remove rows with missing lon or lat values
+data_24_complete <- data_24[!is.na(data_24$lon) & !is.na(data_24$lat), ]
+
+# Market information paper
+# Convert the relevant variables into spatial point patterns
+marketinformation_ppp <- ppp(data_24_complete$lon, data_24_complete$lat, marks = data_24_complete$marketinformation, window = owin(range(data_24_complete$lon), range(data_24_complete$lat)))
+organisedmarketing_ppp <- ppp(data_24_complete$lon, data_24_complete$lat, marks = data_24_complete$organisedmarketing, window = owin(range(data_24_complete$lon), range(data_24_complete$lat)))
+farmerorganisation_ppp <- ppp(data_24_complete$lon, data_24_complete$lat, marks = data_24_complete$farmerorganisation, window = owin(range(data_24_complete$lon), range(data_24_complete$lat)))
+marketdistribution_ppp <- ppp(data_24_complete$lon, data_24_complete$lat, marks = data_24_complete$marketdistribution, window = owin(range(data_24_complete$lon), range(data_24_complete$lat)))
+
+# Calculate distances (k=10) and convert to binary/count variables
+data_24_complete$marketinformation_dist <- ifelse(nndist(marketinformation_ppp, k=10) <= 10, 1, 0)
+data_24_complete$organisedmarketing_dist <- ifelse(nndist(organisedmarketing_ppp, k=10) <= 10, 1, 0)
+data_24_complete$farmerorganisation_dist <- ifelse(nndist(farmerorganisation_ppp, k=10) <= 10, 1, 0)
+data_24_complete$marketdistribution_dist <- ifelse(nndist(marketdistribution_ppp, k=10) <= 10, 1, 0)
+
+# Combine results
+data_24_complete$marketing_sum <- rowSums(data_24_complete[, c("marketinformation_dist", "organisedmarketing_dist", "farmerorganisation_dist", "marketdistribution_dist")])
+data_24_complete$marketing_d <- ifelse(data_24_complete$marketing_sum == 0, 0, 1)
+
+# Generate categorical variables based on marketing_sum
+data_24_complete$marketing_sum_d <- cut(data_24_complete$marketing_sum, breaks=c(-Inf, 0, 1, 2, 3, Inf), labels=0:4)
+data_24_complete$marketing_sum_any <- ifelse(data_24_complete$marketing_sum_d == 1, 0, 1)
+
+data_24_complete$marketing_sum_a2 <- ifelse(data_24_complete$marketing_sum <= 1, 0, 1)
+data_24_complete$marketing_sum_a3 <- ifelse(data_24_complete$marketing_sum <= 2, 0, 1)
+data_24_complete$marketing_sum_a4 <- ifelse(data_24_complete$marketing_sum == 4, 1, 0)
+
+# Merge results back to the original data_24 frame
+data_24 <- merge(data_24, data_24_complete, all.x = TRUE)
+
+# Variable Selection for final analysis
+data_24_clean <- data_24 %>%
+  select(hdds, marketing_sum_any, hhh_educated, hhh_sex, hhh_age, hhh_female_d, 
+         hhh_marital, hhh_religion_d, hh_id, hhh_employ_d, lnproxy_income, draughtpowercat_d, 
+         hh_size, cattleyn, donkeyyn, sheepyn, goatsyn, pigsyn, poultry_yn, rabbitsyn, lon, lat, starts_with("province")) %>%
+  mutate(across(everything(), as.numeric)) %>%
+  na.omit()
+
+# 2022 Data Processing
+data_22$hhage[data_22$hhage == 998] <- NA
+data_22$hhh_age <- data_22$hhage
+
+data_22$hhh_sex <- data_22$hhsex
+data_22$hhh_female_d <- ifelse(data_22$hhh_sex == 1, 1, 0)
+
+data_22$hhh_marital <- data_22$hhmarital
+data_22$hhh_marital[data_22$hhh_marital == 99] <- NA
+
+data_22$province_d <- as.factor(data_22$PROVINCE_CODE)
+
+data_22$hheduclevel[is.na(data_22$hheducation)] <- data_22$hheducation
+data_22$hhh_education_d <- as.factor(data_22$hheduclevel)
+
+data_22$draughtpowercat_d <- as.factor(data_22$DROUGHT)
+
+# Remove rows with missing lon or lat values
+data_22_complete <- data_22[!is.na(data_22$LONGITUDE) & !is.na(data_22$LATITUDE), ]
+names(data_22_complete)[names(data_22_complete) == "LONGITUDE"] <- "lon"
+names(data_22_complete)[names(data_22_complete) == "LATITUDE"] <- "lat"
+
+data_22_complete$hhh_educated <- ifelse(data_22_complete$hhh_education_d == 1, 0, 1)
+
+# Market information paper
+marketinformation <- ifelse(data_22_complete$MARKETING==2,1,0)
+organisedmarketing <- ifelse(data_22_complete$MARKETING==3,1,0)
+farmerorganisation <- ifelse(data_22_complete$MARKETING==1,1,0)
+marketdistribution<- ifelse(data_22_complete$MARKETING==4,1,0)
+
+# Market information paper
+# Convert the relevant variables into spatial point patterns
+marketinformation_ppp <- ppp(data_22_complete$lon, data_22_complete$lat, marks = data_22_complete$marketinformation, window = owin(range(data_22_complete$lon), range(data_22_complete$lat)))
+organisedmarketing_ppp <- ppp(data_22_complete$lon, data_22_complete$lat, marks = data_22_complete$organisedmarketing, window = owin(range(data_22_complete$lon), range(data_22_complete$lat)))
+farmerorganisation_ppp <- ppp(data_22_complete$lon, data_22_complete$lat, marks = data_22_complete$farmerorganisation, window = owin(range(data_22_complete$lon), range(data_22_complete$lat)))
+marketdistribution_ppp <- ppp(data_22_complete$lon, data_22_complete$lat, marks = data_22_complete$marketdistribution, window = owin(range(data_22_complete$lon), range(data_22_complete$lat)))
+
+# Calculate distances (k=10) and convert to binary/count variables
+data_22_complete$marketinformation_dist <- ifelse(nndist(marketinformation_ppp, k=10) <= 10, 1, 0)
+data_22_complete$organisedmarketing_dist <- ifelse(nndist(organisedmarketing_ppp, k=10) <= 10, 1, 0)
+data_22_complete$farmerorganisation_dist <- ifelse(nndist(farmerorganisation_ppp, k=10) <= 10, 1, 0)
+data_22_complete$marketdistribution_dist <- ifelse(nndist(marketdistribution_ppp, k=10) <= 10, 1, 0)
+
+# Combine results
+data_22_complete$marketing_sum <- rowSums(data_22_complete[, c("marketinformation_dist", "organisedmarketing_dist", "farmerorganisation_dist", "marketdistribution_dist")])
+data_22_complete$marketing_d <- ifelse(data_22_complete$marketing_sum == 0, 0, 1)
+
+# Generate categorical variables based on marketing_sum
+data_22_complete$marketing_sum_d <- cut(data_22_complete$marketing_sum, breaks=c(-Inf, 0, 1, 2, 3, Inf), labels=0:4)
+data_22_complete$marketing_sum_any <- ifelse(data_22_complete$marketing_sum_d == 1, 0, 1)
+
+data_22_complete$marketing_sum_a2 <- ifelse(data_22_complete$marketing_sum <= 1, 0, 1)
+data_22_complete$marketing_sum_a3 <- ifelse(data_22_complete$marketing_sum <= 2, 0, 1)
+data_22_complete$marketing_sum_a4 <- ifelse(data_22_complete$marketing_sum == 4, 1, 0)
+
+# Household Dietary Diversity Index
+data_22_complete$hdds <- data_22_complete$HDDS_HH
+
+# Rename the variables to lowercase in data_22
+data_22 <- data_22 %>%
+  rename_with(tolower, .cols = c("SHEEPYN", "DONKEYYN", "CATTLEYN", "GOATSYN", "PIGSYN", "POULTRY_YN", "RABBITSYN"))
+
+# Income
+data_22$lnproxy_income <- log(1 + data_22$proxy_income)
+
+# Merge results back to the original data_22 frame
+data_22 <- merge(data_22, data_22_complete, all.x = TRUE)
+
+# Variable Selection for final analysis
+data_22_clean <- data_22 %>%
+  select(hdds, marketing_sum_any, hhh_educated, hhh_sex, hhh_age, hhh_female_d, 
+         hhh_marital, draughtpowercat_d, 
+         hh_size, lnproxy_income, cattleyn, donkeyyn, sheepyn, goatsyn, pigsyn, poultry_yn, rabbitsyn, lon, lat, starts_with("province")) %>%
+  mutate(across(everything(), as.numeric)) %>%
+  na.omit()
+
+```
+
+A. Load and Clean-Up (Updated version but I need to debug an error with "MARKETING_SUM_ANY")
+```{r}
+library(sf)
+library(sp)
+library(haven)
+library(spatstat)
+library(dplyr)
+library(units)
+
+# Load the data
+data_24 <- read_dta("C:/Users/hgruesohurtado/Dropbox/Documents/Laboral/Oxford/Climate, Conflicts, & Pandemics/Zimbabwe Paper/2024_ZimLAC_rural_SF.dta")
+data_22 <- read_dta("C:/Users/hgruesohurtado/Dropbox/Documents/Laboral/Oxford/Climate, Conflicts, & Pandemics/Zimbabwe Paper/2022_ZimVAC_RLA_SF.dta")
+
+# ------------------------------
+# 2024 Data Processing
+# ------------------------------
+data_24$hh_age[data_24$hh_age == 998] <- NA
+data_24$hhh_age <- data_24$hh_age
+
+data_24$hhh_sex <- data_24$hh_sex
+data_24$hhh_female_d <- ifelse(data_24$hhh_sex == 1, 1, 0)
+
+data_24$hhh_marital <- data_24$hh_marital
+data_24$hhh_marital[data_24$hhh_marital == 99] <- NA
+
+data_24$province_d <- as.factor(data_24$province_code)
+data_24$hhh_religion_d <- as.factor(data_24$hh_religion)
+
+data_24$hheduclevel[is.na(data_24$hheduclevel)] <- data_24$reseduclevel
+data_24$hhh_education_d <- as.factor(data_24$hheduclevel)
+data_24$hhh_educated <- ifelse(data_24$hhh_education_d == 1, 0, 1)
+
+data_24$hhh_employ <- data_24$hh_employ
+data_24$hhh_employ_d <- as.factor(data_24$hhh_employ)
+
+data_24$draughtpowercat_d <- as.factor(data_24$draughtpowercat)
+data_24$lnproxy_income <- log(1 + data_24$proxy_income)
+
+# Remove rows with missing lon or lat values
+data_24_complete <- data_24[!is.na(data_24$lon) & !is.na(data_24$lat), ]
+
+# Market information paper
+df <- data_24_complete
+
+# Convert to spatial object
+df_sf <- st_as_sf(df, coords = c("lon", "lat"), crs = 4326)
+
+# Function to create spatial weights matrix
+create_swm <- function(data, id_col, dist) {
+  # Convert to spatial points
+  pts <- st_geometry(data)
+  
+  # Create a distance matrix with units
+  d <- set_units(st_distance(pts, pts), "m")
+  
+  # Create a binary weight matrix
+  w <- d < set_units(dist, "m")
+  diag(w) <- 0
+  
+  return(w)
+}
+
+# Create spatial weight matrices
+w_marketinformation <- create_swm(df_sf, rownames(df_sf), 10000) # Distance in meters
+w_organisedmarketing <- create_swm(df_sf, rownames(df_sf), 10000)
+w_farmerorganisation <- create_swm(df_sf, rownames(df_sf), 10000)
+w_marketdistribution <- create_swm(df_sf, rownames(df_sf), 10000)
+
+# Calculate row sums of spatial weight matrices
+df$marketing_sum <- rowSums(as.matrix(w_marketinformation * df$marketinformation) +
+                           as.matrix(w_organisedmarketing * df$organisedmarketing) +
+                           as.matrix(w_farmerorganisation * df$farmerorganisation) +
+                           as.matrix(w_marketdistribution * df$marketdistribution))
+
+# Create binary variable indicating if any of the four initial variables is 1
+df$marketing_d <- ifelse(df$marketing_sum > 0, 1, 0)
+
+# Create dummy variables based on different thresholds of marketing_sum
+df$marketing_sum_any <- ifelse(df$marketing_sum > 0, 1, 0)
+df$marketing_sum_a2 <- ifelse(df$marketing_sum > 1, 1, 0)
+df$marketing_sum_a3 <- ifelse(df$marketing_sum > 2, 1, 0)
+df$marketing_sum_a4 <- ifelse(df$marketing_sum == 4, 1, 0)
+
+# Variable Selection for final analysis
+data_24_clean <- df %>%
+  select(hdds, marketing_sum_any, hhh_educated, hhh_sex, hhh_age, hhh_female_d, 
+         hhh_marital, hhh_religion_d, hh_id, hhh_employ_d, lnproxy_income, draughtpowercat_d, 
+         hh_size, cattleyn, donkeyyn, sheepyn, goatsyn, pigsyn, poultry_yn, rabbitsyn, lon, lat, starts_with("province")) %>%
+  mutate(across(everything(), as.numeric)) %>%
+  na.omit()
+
+# ------------------------------
+# 2022 Data Processing
+# ------------------------------
+data_22$hhage[data_22$hhage == 998] <- NA
+data_22$hhh_age <- data_22$hhage
+
+data_22$hhh_sex <- data_22$hhsex
+data_22$hhh_female_d <- ifelse(data_22$hhh_sex == 1, 1, 0)
+
+data_22$hhh_marital <- data_22$hhmarital
+data_22$hhh_marital[data_22$hhh_marital == 99] <- NA
+
+data_22$province_d <- as.factor(data_22$PROVINCE_CODE)
+
+data_22$hheduclevel[is.na(data_22$hheducation)] <- data_22$hheducation
+data_22$hhh_education_d <- as.factor(data_22$hheduclevel)
+
+data_22$draughtpowercat_d <- as.factor(data_22$DROUGHT)
+
+# Income
+data_22$lnproxy_income <- log(1 + data_22$proxy_income)
+
+# Rename the variables to lowercase in data_22
+data_22 <- data_22 %>%
+  rename_with(tolower, .cols = c("SHEEPYN", "DONKEYYN", "CATTLEYN", "GOATSYN", "PIGSYN", "POULTRY_YN", "RABBITSYN"))
+
+# Remove rows with missing lon or lat values
+data_22_complete <- data_22[!is.na(data_22$LONGITUDE) & !is.na(data_22$LATITUDE), ]
+names(data_22_complete)[names(data_22_complete) == "LONGITUDE"] <- "lon"
+names(data_22_complete)[names(data_22_complete) == "LATITUDE"] <- "lat"
+
+data_22_complete$hhh_educated <- ifelse(data_22_complete$hhh_education_d == 1, 0, 1)
+
+# Remove rows with missing lon or lat values
+data_22_complete <- data_22[!is.na(data_22_complete$lon) & !is.na(data_22_complete$lat), ]
+
+# Market information paper
+df <- data_22_complete
+
+# Convert to spatial object
+df_sf <- st_as_sf(df, coords = c("lon", "lat"), crs = 4326)
+
+# Function to create spatial weights matrix
+create_swm <- function(data, id_col, dist) {
+  # Convert to spatial points
+  pts <- st_geometry(data)
+  
+  # Create a distance matrix with units
+  d <- set_units(st_distance(pts, pts), "m")
+  
+  # Create a binary weight matrix
+  w <- d < set_units(dist, "m")
+  diag(w) <- 0
+  
+  return(w)
+}
+
+# Create spatial weight matrices
+w_marketinformation <- create_swm(df_sf, rownames(df_sf), 10000) # Distance in meters
+w_organisedmarketing <- create_swm(df_sf, rownames(df_sf), 10000)
+w_farmerorganisation <- create_swm(df_sf, rownames(df_sf), 10000)
+w_marketdistribution <- create_swm(df_sf, rownames(df_sf), 10000)
+
+# Calculate row sums of spatial weight matrices
+df$marketing_sum <- rowSums(as.matrix(w_marketinformation * df$marketinformation) +
+                           as.matrix(w_organisedmarketing * df$organisedmarketing) +
+                           as.matrix(w_farmerorganisation * df$farmerorganisation) +
+                           as.matrix(w_marketdistribution * df$marketdistribution))
+
+# Create binary variable indicating if any of the four initial variables is 1
+df$marketing_d <- ifelse(df$marketing_sum > 0, 1, 0)
+
+# Create dummy variables based on different thresholds of marketing_sum
+df$marketing_sum_any <- ifelse(df$marketing_sum > 0, 1, 0)
+df$marketing_sum_a2 <- ifelse(df$marketing_sum > 1, 1, 0)
+df$marketing_sum_a3 <- ifelse(df$marketing_sum > 2, 1, 0)
+df$marketing_sum_a4 <- ifelse(df$marketing_sum == 4, 1, 0)
+
+data_22_complete <- df 
+
+# Household Dietary Diversity Index
+data_22_complete$hdds <- data_22_complete$HDDS_HH
+
+# Variable Selection for final analysis
+data_22_clean <- data_22_complete %>%
+  select(hdds, marketing_sum_any, hhh_educated, hhh_sex, hhh_age, hhh_female_d, 
+         hhh_marital, draughtpowercat_d, 
+         hh_size, lnproxy_income, cattleyn, donkeyyn, sheepyn, goatsyn, pigsyn, poultry_yn, rabbitsyn, lon, lat, starts_with("province")) %>%
+  mutate(across(everything(), as.numeric)) %>%
+  na.omit()
+
+```
+
+B. Causal Forest (Needs to be updated, I was assuming I had a panel so I need to updated to covariates to the same year as the outcome)
+```{r}
+library(grf)
+library(dplyr)
+library(stargazer)
+
+# Select and clean data_24
+data_24_clean <- data_24 %>%
+  select(lon, lat, hhh_age, hhh_sex, hhh_female_d, 
+         hhh_marital, hhh_educated, province_d, hhh_religion_d,
+         hhh_employ_d, draughtpowercat_d, lnproxy_income, hdds, marketing_sum_any, starts_with("hhh_marital_d"), starts_with("hhh_religion_d"), hhh_employ_d,
+         hh_size, cattleyn, donkeyyn, sheepyn, goatsyn, pigsyn,
+         poultry_yn, rabbitsyn, starts_with("province_d")) %>%
+  mutate(across(everything(), as.numeric)) %>%
+  na.omit()
+
+# Add an index column to the cleaned data_24
+data_24_clean <- data_24_clean %>%
+  mutate(index = row_number())
+
+# Define the outcome variable, treatment variable, and covariates
+outcome <- as.numeric(data_24_clean$hdds)
+treatment <- as.numeric(data_24_clean$marketing_sum_any)
+covariates <- data_24_clean %>%
+  select(-hdds, -marketing_sum_any, -index)
+
+# Ensure covariates are in matrix form and standardize
+covariates_matrix <- as.matrix(covariates)
+covariates_matrix <- scale(covariates_matrix)
+
+# Check dimensions to ensure they match
+print(dim(covariates_matrix))
+print(length(outcome))
+print(length(treatment))
+
+# Train the causal forest with interaction terms
+forest_general <- causal_forest(X = covariates_matrix, Y = outcome, W = treatment, honesty = TRUE)
+
+# Predict the treatment effects for the general population
+predictions_general <- predict(forest_general, estimate.variance = TRUE)
+
+# Extract treatment effect estimates for the general population
+treatment_effects_general <- predictions_general$predictions
+
+# Add treatment effects to the cleaned data_24
+data_24_clean <- data_24_clean %>%
+  mutate(treatment_effects_general = treatment_effects_general)
+
+# Filter data_24 to include only rows with complete cases for the relevant variables
+data_24_filtered <- data_24 %>%
+  filter(complete.cases(select(., hdds, marketing_sum_any, hhh_educated, hhh_age, hhh_female_d, 
+                               hhh_marital_d, hhh_religion_d, 
+                               hhh_employ_d, lnproxy_income, hh_size, cattleyn, donkeyyn, 
+                               sheepyn, goatsyn, pigsyn, poultry_yn, rabbitsyn, starts_with("province_d")))) %>%
+  mutate(index = row_number())
+
+# Ensure the filtered data_24 has the same length for outcome and treatment
+outcome_filtered <- as.numeric(data_24_filtered$hdds)
+treatment_filtered <- as.numeric(data_24_filtered$marketing_sum_any)
+
+# Estimate heterogeneous treatment effect for females using interactions
+data_24_filtered <- data_24_filtered %>%
+  mutate(treatment_female = treatment * hhh_female_d,
+         treatment_educated = treatment * hhh_educated)
+
+# Train a new causal forest including the interaction term for females
+covariates_with_female_interaction <- data_24_filtered %>%
+  select(hhh_educated, hhh_age, hhh_female_d, treatment_female, 
+         starts_with("hhh_marital_d"), starts_with("hhh_religion_d"), hhh_employ_d, 
+         lnproxy_income, hh_size, cattleyn, donkeyyn, sheepyn, goatsyn, pigsyn, 
+         poultry_yn, rabbitsyn, starts_with("province_d"))
+
+# Ensure covariates with interaction are in matrix form and standardize
+covariates_with_female_interaction <- covariates_with_female_interaction %>%
+  mutate(across(everything(), as.numeric))
+
+covariates_with_female_interaction_matrix <- as.matrix(covariates_with_female_interaction)
+covariates_with_female_interaction_matrix <- scale(covariates_with_female_interaction_matrix)
+
+# Train the causal forest with the female interaction term
+forest_female_interaction <- causal_forest(X = covariates_with_female_interaction_matrix, Y = outcome_filtered, W = treatment_filtered, honesty = TRUE)
+
+# Predict the treatment effects for the general population
+predictions_female_interaction <- predict(forest_female_interaction, estimate.variance = TRUE)
+
+# Extract treatment effect estimates for the general population
+treatment_effects_female_interaction <- predictions_female_interaction$predictions
+
+# Add treatment effects with female interaction to the filtered data_24
+data_24_filtered <- data_24_filtered %>%
+  mutate(treatment_effects_female_interaction = treatment_effects_female_interaction)
+
+# Train a new causal forest including the interaction term for education
+covariates_with_educated_interaction <- data_24_filtered %>%
+  select(hhh_educated, hhh_age, hhh_female_d, treatment_educated, 
+         starts_with("hhh_marital_d"), starts_with("hhh_religion_d"), hhh_employ_d, 
+         lnproxy_income, hh_size, cattleyn, donkeyyn, sheepyn, goatsyn, pigsyn, 
+         poultry_yn, rabbitsyn, starts_with("province_d"))
+
+# Ensure covariates with interaction are in matrix form and standardize
+covariates_with_educated_interaction <- covariates_with_educated_interaction %>%
+  mutate(across(everything(), as.numeric))
+
+covariates_with_educated_interaction_matrix <- as.matrix(covariates_with_educated_interaction)
+covariates_with_educated_interaction_matrix <- scale(covariates_with_educated_interaction_matrix)
+
+# Train the causal forest with the educated interaction term
+forest_educated_interaction <- causal_forest(X = covariates_with_educated_interaction_matrix, Y = outcome_filtered, W = treatment_filtered, honesty = TRUE)
+
+# Predict the treatment effects for the general population
+predictions_educated_interaction <- predict(forest_educated_interaction, estimate.variance = TRUE)
+
+# Extract treatment effect estimates for the general population
+treatment_effects_educated_interaction <- predictions_educated_interaction$predictions
+
+# Add treatment effects with educated interaction to the filtered data_24
+data_24_filtered <- data_24_filtered %>%
+  mutate(treatment_effects_educated_interaction = treatment_effects_educated_interaction)
+
+# Add an index column to the original data_24
+data_24 <- data_24 %>%
+  mutate(index = row_number())
+
+# Merge the treatment effects back into the original data_24
+data_24 <- data_24 %>%
+  left_join(data_24_clean %>% select(index, treatment_effects_general), by = "index") %>%
+  left_join(data_24_filtered %>% select(index, treatment_effects_female_interaction, treatment_effects_educated_interaction), by = "index") %>%
+  select(-index)
+
+```
+
+C. Results Table
+```{r}
+library(dplyr)
+library(stargazer)
+
+# Extract treatment effects and variances
+predictions_general <- predict(forest_general, estimate.variance = TRUE)
+predictions_female_interaction <- predict(forest_female_interaction, estimate.variance = TRUE)
+predictions_educated_interaction <- predict(forest_educated_interaction, estimate.variance = TRUE)
+
+treatment_effects_general <- predictions_general$predictions
+treatment_effects_female_interaction <- predictions_female_interaction$predictions
+treatment_effects_educated_interaction <- predictions_educated_interaction$predictions
+
+std_errors_general <- sqrt(predictions_general$variance.estimates)
+std_errors_female_interaction <- sqrt(predictions_female_interaction$variance.estimates)
+std_errors_educated_interaction <- sqrt(predictions_educated_interaction$variance.estimates)
+
+# Calculate p-values
+p_values_general <- 2 * pnorm(-abs(mean(treatment_effects_general) / mean(std_errors_general)))
+p_values_female <- 2 * pnorm(-abs(mean(treatment_effects_female_interaction) / mean(std_errors_female_interaction)))
+p_values_educated <- 2 * pnorm(-abs(mean(treatment_effects_educated_interaction) / mean(std_errors_educated_interaction)))
+
+# Print p-values for verification
+print(paste("General Model p-value:", p_values_general))
+print(paste("Female Interaction p-value:", p_values_female))
+print(paste("Educated Interaction p-value:", p_values_educated))
+
+# Function to add significance stars
+add_stars <- function(p_values) {
+  stars <- ifelse(p_values < 0.01, "***",
+                  ifelse(p_values < 0.05, "**",
+                         ifelse(p_values < 0.1, "*", "")))
+  return(stars)
+}
+
+# Add stars to CATE estimates
+stars_general <- add_stars(p_values_general)
+stars_female <- add_stars(p_values_female)
+stars_educated <- add_stars(p_values_educated)
+
+# Create a data_24 frame with formatted CATE and Std_Error
+results <- data_24.frame(
+  Model = c("At Least One Marketing Practice", "At Least One Marketing Practice x Female", "At Least One Marketing Practice x Educated"),
+  CATE = c(paste0(round(mean(treatment_effects_general), 3), stars_general),
+           paste0(round(mean(treatment_effects_female_interaction), 3), stars_female),
+           paste0(round(mean(treatment_effects_educated_interaction), 3), stars_educated)),
+  Std_Error = c(paste0("(", round(mean(std_errors_general), 3), ")"),
+                paste0("(", round(mean(std_errors_female_interaction), 3), ")"),
+                paste0("(", round(mean(std_errors_educated_interaction), 3), ")"))
+)
+
+# Use stargazer to create a formatted table
+stargazer(results, type = "text", summary = FALSE,
+          title = "Causal Forest Results for Household Dietary Diversity Index",
+          column.labels = c("CATE", "Standard Error"),
+          rownames = FALSE, digits = 3,
+          notes = "Note: *p<0.1; **p<0.05; ***p<0.01",
+          out = "causal_forest_results.txt")
+
+```
+
+D. RATE
+```{r}
+library(grf)
+library(dplyr)
+library(stargazer)
+
+# Select and clean data_24
+data_24_clean <- data_24 %>%
+  select(hdds, marketing_sum_any, hhh_educated, hhh_age, hhh_female_d, 
+         starts_with("hhh_marital_d"), starts_with("hhh_religion_d"), hhh_employ_d, 
+         lnproxy_income, hh_size, cattleyn, donkeyyn, sheepyn, goatsyn, pigsyn, 
+         poultry_yn, rabbitsyn, starts_with("province_d")) %>%
+  mutate(across(everything(), as.numeric)) %>%
+  na.omit()
+
+# Add an index column to the cleaned data_24
+data_24_clean <- data_24_clean %>%
+  mutate(index = row_number())
+
+# Define the outcome variable, treatment variable, and covariates
+outcome <- as.numeric(data_24_clean$hdds)
+treatment <- as.numeric(data_24_clean$marketing_sum_any)
+covariates <- data_24_clean %>%
+  select(-hdds, -marketing_sum_any, -index)
+
+# Ensure covariates are in matrix form and standardize
+covariates_matrix <- as.matrix(covariates)
+covariates_matrix <- scale(covariates_matrix)
+
+# Check dimensions to ensure they match
+print(dim(covariates_matrix))
+print(length(outcome))
+print(length(treatment))
+
+# Train the causal forest with interaction terms
+forest_general <- causal_forest(X = covariates_matrix, Y = outcome, W = treatment, honesty = TRUE)
+
+# Predict the treatment effects for the general population
+predictions_general <- predict(forest_general, estimate.variance = TRUE)
+
+# Extract treatment effect estimates for the general population
+treatment_effects_general <- predictions_general$predictions
+
+# Add treatment effects to the cleaned data_24
+data_24_clean <- data_24_clean %>%
+  mutate(treatment_effects_general = treatment_effects_general)
+
+# Filter data_24 to include only rows with complete cases for the relevant variables
+data_24_filtered <- data_24 %>%
+  filter(complete.cases(select(., hdds, marketing_sum_any, hhh_educated, hhh_age, hhh_female_d, 
+                               starts_with("hhh_marital_d"), starts_with("hhh_religion_d"), 
+                               hhh_employ_d, lnproxy_income, hh_size, cattleyn, donkeyyn, 
+                               sheepyn, goatsyn, pigsyn, poultry_yn, rabbitsyn, starts_with("province_d")))) %>%
+  mutate(index = row_number())
+
+# Ensure the filtered data_24 has the same length for outcome and treatment
+outcome_filtered <- as.numeric(data_24_filtered$hdds)
+treatment_filtered <- as.numeric(data_24_filtered$marketing_sum_any)
+
+# Estimate heterogeneous treatment effect for females using interactions
+data_24_filtered <- data_24_filtered %>%
+  mutate(treatment_female = treatment * hhh_female_d,
+         treatment_educated = treatment * hhh_educated)
+
+# Train a new causal forest including the interaction term for females
+covariates_with_female_interaction <- data_24_filtered %>%
+  select(hhh_educated, hhh_age, hhh_female_d, treatment_female, 
+         starts_with("hhh_marital_d"), starts_with("hhh_religion_d"), hhh_employ_d, 
+         lnproxy_income, hh_size, cattleyn, donkeyyn, sheepyn, goatsyn, pigsyn, 
+         poultry_yn, rabbitsyn, starts_with("province_d"))
+
+# Ensure covariates with interaction are in matrix form and standardize
+covariates_with_female_interaction <- covariates_with_female_interaction %>%
+  mutate(across(everything(), as.numeric))
+
+covariates_with_female_interaction_matrix <- as.matrix(covariates_with_female_interaction)
+covariates_with_female_interaction_matrix <- scale(covariates_with_female_interaction_matrix)
+
+# Train the causal forest with the female interaction term
+forest_female_interaction <- causal_forest(X = covariates_with_female_interaction_matrix, Y = outcome_filtered, W = treatment_filtered, honesty = TRUE)
+
+# Predict the treatment effects for the general population
+predictions_female_interaction <- predict(forest_female_interaction, estimate.variance = TRUE)
+
+# Extract treatment effect estimates for the general population
+treatment_effects_female_interaction <- predictions_female_interaction$predictions
+
+# Add treatment effects with female interaction to the filtered data_24
+data_24_filtered <- data_24_filtered %>%
+  mutate(treatment_effects_female_interaction = treatment_effects_female_interaction)
+
+# Train a new causal forest including the interaction term for education
+covariates_with_educated_interaction <- data_24_filtered %>%
+  select(hhh_educated, hhh_age, hhh_female_d, treatment_educated, 
+         starts_with("hhh_marital_d"), starts_with("hhh_religion_d"), hhh_employ_d, 
+         lnproxy_income, hh_size, cattleyn, donkeyyn, sheepyn, goatsyn, pigsyn, 
+         poultry_yn, rabbitsyn, starts_with("province_d"))
+
+# Ensure covariates with interaction are in matrix form and standardize
+covariates_with_educated_interaction <- covariates_with_educated_interaction %>%
+  mutate(across(everything(), as.numeric))
+
+covariates_with_educated_interaction_matrix <- as.matrix(covariates_with_educated_interaction)
+covariates_with_educated_interaction_matrix <- scale(covariates_with_educated_interaction_matrix)
+
+# Train the causal forest with the educated interaction term
+forest_educated_interaction <- causal_forest(X = covariates_with_educated_interaction_matrix, Y = outcome_filtered, W = treatment_filtered, honesty = TRUE)
+
+# Predict the treatment effects for the general population
+predictions_educated_interaction <- predict(forest_educated_interaction, estimate.variance = TRUE)
+
+# Extract treatment effect estimates for the general population
+treatment_effects_educated_interaction <- predictions_educated_interaction$predictions
+
+# Add treatment effects with educated interaction to the filtered data_24
+data_24_filtered <- data_24_filtered %>%
+  mutate(treatment_effects_educated_interaction = treatment_effects_educated_interaction)
+
+# Add an index column to the original data_24
+data_24 <- data_24 %>%
+  mutate(index = row_number())
+
+# Merge the treatment effects back into the original data_24
+data_24 <- data_24 %>%
+  left_join(data_24_clean %>% select(index, treatment_effects_general), by = "index") %>%
+  left_join(data_24_filtered %>% select(index, treatment_effects_female_interaction, treatment_effects_educated_interaction), by = "index") %>%
+  select(-index)
+
+# RATE analysis
+# Use the trained causal forest models to predict treatment effects
+cate_hat_general <- predict(forest_general, covariates_matrix)$predictions
+cate_hat_female <- predict(forest_female_interaction, covariates_with_female_interaction_matrix)$predictions
+cate_hat_educated <- predict(forest_educated_interaction, covariates_with_educated_interaction_matrix)$predictions
+
+# Train an evaluation forest on the full data_24set
+cf_eval <- causal_forest(covariates_matrix, outcome, treatment)
+
+# Compute the RATE for each model
+rate_general <- rank_average_treatment_effect(cf_eval, cate_hat_general)
+rate_female <- rank_average_treatment_effect(cf_eval, cate_hat_female)
+rate_educated <- rank_average_treatment_effect(cf_eval, cate_hat_educated)
+
+# Print the RATE estimates and standard errors
+print("General Model RATE:")
+print(rate_general$estimate)
+print(rate_general$std.err)
+
+print("Female Interaction RATE:")
+print(rate_female$estimate)
+print(rate_female$std.err)
+
+print("Educated Interaction RATE:")
+print(rate_educated$estimate)
+print(rate_educated$std.err)
+
+# Plot the TOC curves
+plot(rate_general, main = "TOC Curve for General Model")
+plot(rate_female, main = "TOC Curve for Female Interaction Model")
+plot(rate_educated, main = "TOC Curve for Educated Interaction Model")
+
+```
+
+E. Individuals with Highest Predicted Effects
+```{r}
+library(dplyr)
+library(ggplot2)
+
+# Define the fraction of top individuals to analyze
+top_fraction <- 0.2
+num_top_individuals <- round(top_fraction * nrow(data_24_clean))
+
+# Extract top individuals based on predicted treatment effects for each model
+top_individuals_general <- data_24_clean %>%
+  mutate(predicted_effect = treatment_effects_general) %>%
+  arrange(desc(predicted_effect)) %>%
+  head(num_top_individuals)
+
+top_individuals_female <- data_24_clean %>%
+  mutate(predicted_effect = treatment_effects_female_interaction) %>%
+  arrange(desc(predicted_effect)) %>%
+  head(num_top_individuals)
+
+top_individuals_educated <- data_24_clean %>%
+  mutate(predicted_effect = treatment_effects_educated_interaction) %>%
+  arrange(desc(predicted_effect)) %>%
+  head(num_top_individuals)
+
+# Summary statistics for the top individuals in each model
+summary_top_general <- summary(top_individuals_general %>% select(-predicted_effect))
+summary_top_female <- summary(top_individuals_female %>% select(-predicted_effect))
+summary_top_educated <- summary(top_individuals_educated %>% select(-predicted_effect))
+
+# Print summary statistics
+print("Summary statistics for the top individuals in the General Model:")
+print(summary_top_general)
+print("Summary statistics for the top individuals in the Female Interaction Model:")
+print(summary_top_female)
+print("Summary statistics for the top individuals in the Educated Interaction Model:")
+print(summary_top_educated)
+
+# Visualize age distribution for top individuals in the General Model
+ggplot(top_individuals_general, aes(x = hhh_age)) +
+  geom_histogram(binwidth = 5, fill = 'blue', alpha = 0.7) +
+  labs(title = "Age Distribution of Top Individuals (General Model)",
+       x = "Age", y = "Frequency")
+
+# Visualize the distribution of categorical variables for the top individuals in the General Model
+# Marital Status
+if ("hhh_marital" %in% names(top_individuals_general)) {
+  ggplot(top_individuals_general, aes(x = as.factor(hhh_marital))) +
+    geom_bar(fill = 'green', alpha = 0.7) +
+    labs(title = "Marital Status of Top Individuals (General Model)",
+         x = "Marital Status", y = "Count")
+}
+
+# Female indicator
+ggplot(top_individuals_general, aes(x = as.factor(hhh_female_d))) +
+  geom_bar(fill = 'purple', alpha = 0.7) +
+  labs(title = "Gender Distribution of Top Individuals (General Model)",
+       x = "Female (1 = Yes, 0 = No)", y = "Count")
+
+# Education level
+ggplot(top_individuals_general, aes(x = as.factor(hhh_educated))) +
+  geom_bar(fill = 'orange', alpha = 0.7) +
+  labs(title = "Education Level of Top Individuals (General Model)",
+       x = "Educated (1 = Yes, 0 = No)", y = "Count")
+
+```
+
