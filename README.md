@@ -3,3 +3,5 @@ The R code shows the steps to clean up the data and evaluate the impact of the m
 ![image](https://github.com/user-attachments/assets/7ffdcc2b-ea0f-450b-a4a1-734b198efceb)
 ![image](https://github.com/user-attachments/assets/cb1dae65-69b8-4def-85c8-f67b61230854)
 ![image](https://github.com/user-attachments/assets/92fbbf9e-7b46-469c-b75c-604273c3d94f)
+
+(useless addition from Seth to demonstrate Git)
