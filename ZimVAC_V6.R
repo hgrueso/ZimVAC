@@ -7,9 +7,10 @@ library(grf)
 library(stargazer)
 library(ggplot2)
 library(caret)  # For nearZeroVar and findLinearCombos functions
+library(here)
 
 # Load the data (change path accordingly)
-data_24 <- read_dta("C:/Users/hgruesohurtado/Dropbox/Documents/Laboral/Oxford/Climate, Conflicts, & Pandemics/Zimbabwe Paper/2024_ZimLAC_rural_SF.dta")
+data_24 <- read_dta(here("data/2024_ZimLAC_rural_SF.dta"))
 # If needed, load data_22 similarly
 
 # ------------------------------#
