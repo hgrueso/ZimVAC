@@ -3,3 +3,6 @@
 .RData
 .Ruserdata
 *.dta
+.DS_Store
+tatenda/
+papers/
