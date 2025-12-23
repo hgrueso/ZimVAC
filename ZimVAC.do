@@ -53,6 +53,7 @@ save "ZIMVAC24Clean", replace
 
 *2022 ZIMVAC
 use HH_ID RESPONDENT_AGE hhsex hhmarital PROVINCE_CODE hh_religion hheducation CATTLEYN DONKEYYN SHEEPYN GOATSYN PIGSYN POULTRY_YN RABBITSYN proxy_income hh_size HDDS_HH DistPCode WARD_NUMBER EA_NUMBER VILLAGE_NAME HOUSEHOLD_NUMBER agric_marketing_1 agric_marketing_2 agric_marketing_3 LONGITUDE LATITUDE dcattlecat donkeycat using "data/2022_ZimVAC_RLA_SF.dta"
+
 gen year = 2022
 
 gen hhh_age= RESPONDENT_AGE
@@ -149,6 +150,6 @@ keep hh_id hhh_educated hhh_age hhh_female_d2 hhh_marital_d1-hhh_marital_d5 hhh_
 
 save "ZIMVAC22Clean", replace
 
-append using ZIMVAC22Clean ZIMVAC24Clean
+append using ZIMVAC24Clean
 
 save "ZIMVACCombined", replace
